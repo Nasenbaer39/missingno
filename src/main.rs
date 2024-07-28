@@ -1,5 +1,6 @@
 use eframe::egui::{self, Color32, ColorImage};
 use std::time::Instant;
+use rand::prelude::*;
 
 struct MyApp {
     texture_handle: Option<egui::TextureHandle>,
@@ -21,7 +22,11 @@ impl eframe::App for MyApp {
         let gray_value = ((1.0 - (elapsed / 5.0)).max(0.0) * 255.0) as u8; // Change over 5 seconds
 
         // Create an image buffer with the current color
-        let image: ColorImage = ColorImage::new([256, 256], Color32::from_gray(gray_value));
+        let mut image: ColorImage = ColorImage::new([256, 256], Color32::from_gray(gray_value));
+
+        for pixel in &mut image.pixels {
+            *pixel = Color32::from_gray(rand::thread_rng().gen::<u8>());
+        }
 
         // Load the image into a texture if not already done
         if self.texture_handle.is_none() {
