@@ -1,13 +1,15 @@
 use eframe::egui;
 use rand::prelude::*;
 
+const NOISE_SCALE: usize = 64;
+
 struct NoiseTexture {
-    data: [u8; 64 * 64],
+    data: [u8; NOISE_SCALE * NOISE_SCALE],
 }
 
 impl NoiseTexture {
     fn new() -> Self {
-        Self { data: [0; 64 * 64] }
+        Self { data: [0; NOISE_SCALE * NOISE_SCALE] }
     }
 
     fn scramble(&mut self) {
@@ -18,12 +20,12 @@ impl NoiseTexture {
     }
 
     fn as_color_image(&self, scale: usize) -> egui::ColorImage {
-        let size = 64 * scale;
+        let size = NOISE_SCALE * scale;
         let mut scaled_image: Vec<u8> = Vec::with_capacity(size * size);
-        for y in 0..64 {
+        for y in 0..NOISE_SCALE {
             let mut row: Vec<u8> = Vec::with_capacity(size);
-            for x in 0..64 {
-                let color: u8 = self.data[64 * y + x];
+            for x in 0..NOISE_SCALE {
+                let color: u8 = self.data[NOISE_SCALE * y + x];
                 for _ in 0..scale {
                     row.push(color);
                 }
