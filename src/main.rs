@@ -10,24 +10,26 @@ impl NoiseTexture {
         Self { data: [0; 64 * 64] }
     }
 
-    fn scramble(&mut self) -> () {
+    fn scramble(&mut self) {
         for pixel in &mut self.data {
             let rand: u8 = rand::thread_rng().gen::<u8>();
             *pixel = rand;
         }
     }
 
-    fn data(&self) -> &[u8] {
-        return &self.data;
-    }
-
     fn as_color_image(&self, scale: usize) -> egui::ColorImage {
         let size = 64 * scale;
         let mut scaled_image: Vec<u8> = Vec::with_capacity(size * size);
-        for y in 0..size {
-            for x in 0..size {
-                let index: usize = 64 * (y / scale) + x / scale;
-                scaled_image.push(self.data[index]);
+        for y in 0..64 {
+            let mut row: Vec<u8> = Vec::with_capacity(size);
+            for x in 0..64 {
+                let color: u8 = self.data[64 * y + x];
+                for _ in 0..scale {
+                    row.push(color);
+                }
+            }
+            for _ in 0..scale {
+                scaled_image.append(&mut row.clone());
             }
         }
         egui::ColorImage::from_gray([size, size], &scaled_image)
