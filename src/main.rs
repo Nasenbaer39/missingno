@@ -4,37 +4,42 @@ use rand::prelude::*;
 const NOISE_SCALE: usize = 64;
 
 struct NoiseTexture {
-    data: [u8; NOISE_SCALE * NOISE_SCALE],
+    data: [u8; NOISE_SCALE * NOISE_SCALE * 3],
 }
 
 impl NoiseTexture {
     fn new() -> Self {
-        Self { data: [0; NOISE_SCALE * NOISE_SCALE] }
+        Self {
+            data: [0; NOISE_SCALE * NOISE_SCALE * 3],
+        }
     }
 
     fn scramble(&mut self) {
-        for pixel in &mut self.data {
+        for color in &mut self.data {
             let rand: u8 = rand::thread_rng().gen::<u8>();
-            *pixel = rand;
+            *color = rand;
         }
     }
 
     fn as_color_image(&self, scale: usize) -> egui::ColorImage {
         let size = NOISE_SCALE * scale;
         let mut scaled_image: Vec<u8> = Vec::with_capacity(size * size);
+
+        // upscale the image
         for y in 0..NOISE_SCALE {
             let mut row: Vec<u8> = Vec::with_capacity(size);
             for x in 0..NOISE_SCALE {
-                let color: u8 = self.data[NOISE_SCALE * y + x];
+                let index = NOISE_SCALE * y + x;
                 for _ in 0..scale {
-                    row.push(color);
+                    let color = &mut self.data[index..index + 3].to_vec();
+                    row.append(color);
                 }
             }
             for _ in 0..scale {
                 scaled_image.append(&mut row.clone());
             }
         }
-        egui::ColorImage::from_gray([size, size], &scaled_image)
+        egui::ColorImage::from_rgb([size, size], &scaled_image)
     }
 }
 
