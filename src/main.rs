@@ -27,7 +27,7 @@ impl NoiseTexture {
         for y in 0..size {
             for x in 0..size {
                 let index: usize = 64 * (y / scale) + x / scale;
-                scaled_image.push(self.data[index]); 
+                scaled_image.push(self.data[index]);
             }
         }
         egui::ColorImage::from_gray([size, size], &scaled_image)
@@ -62,13 +62,17 @@ impl eframe::App for MyApp {
             ));
         } else {
             // Update the existing texture with the new image
-            self.image.scramble();
-            self.texture_handle
-                .as_mut()
-                .unwrap()
-                .set(self.image.as_color_image(space), egui::TextureOptions::default());
+            self.texture_handle.as_mut().unwrap().set(
+                self.image.as_color_image(space),
+                egui::TextureOptions::default(),
+            );
         }
 
+        egui::SidePanel::right("Options").show(ctx, |ui| {
+            if ui.button("Scramble").clicked() {
+                self.image.scramble()
+            }
+        });
         egui::CentralPanel::default().show(ctx, |ui| {
             if let Some(texture) = &self.texture_handle {
                 ui.add(egui::Image::new(texture));
@@ -81,9 +85,12 @@ impl eframe::App for MyApp {
 }
 
 fn main() {
-    let options = eframe::NativeOptions::default();
+    let mut options = eframe::NativeOptions::default();
+    let viewport = &mut options.viewport;
+    viewport.inner_size = Some(egui::Vec2::new(900.0, 600.0));
+    viewport.resizable = Some(false);
     let _ = eframe::run_native(
-        "Image Color Change Example",
+        "Missingno",
         options,
         Box::new(|_cc| Ok(Box::new(MyApp::new()))),
     );
