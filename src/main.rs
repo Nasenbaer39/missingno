@@ -1,6 +1,7 @@
 use eframe::egui;
 use rand::prelude::*;
 
+// TODO: separate code into modules
 const NOISE_SCALE: usize = 64;
 
 struct NoiseTexture {
@@ -17,13 +18,14 @@ impl NoiseTexture {
     fn scramble(&mut self, mode: &ColorMode) {
         for pixel in &mut self.data.chunks_mut(3) {
             match mode {
+                // TODO: use thread_rng().fill_bytes() instead
                 ColorMode::Gray => pixel.fill(rand::thread_rng().gen()),
-                ColorMode::RG => {
+                ColorMode::Rg => {
                     pixel[0] = rand::thread_rng().gen();
                     pixel[1] = rand::thread_rng().gen();
                     pixel[2] = 0;
                 }
-                ColorMode::RGB => pixel.fill_with(|| rand::thread_rng().gen()),
+                ColorMode::Rgb => pixel.fill_with(|| rand::thread_rng().gen()),
             }
         }
     }
@@ -36,8 +38,8 @@ impl NoiseTexture {
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum ColorMode {
     Gray,
-    RG,
-    RGB,
+    Rg,
+    Rgb,
 }
 
 struct MyApp {
@@ -73,6 +75,7 @@ impl eframe::App for MyApp {
                 );
         } else {
             // Update the existing texture with the new image
+            // TODO: do not update the image if nothing has changed
             self.texture_handle
                 .as_mut()
                 .unwrap()
@@ -91,11 +94,21 @@ impl eframe::App for MyApp {
                 self.image.scramble(&self.color_mode)
             }
             egui::ComboBox::from_label("")
-                .selected_text(format!("{:?}", self.color_mode))
+                .selected_text(format!("{:?}", self.color_mode).to_uppercase())
                 .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut self.color_mode, ColorMode::Gray, "Gray");
-                    ui.selectable_value(&mut self.color_mode, ColorMode::RG, "RG");
-                    ui.selectable_value(&mut self.color_mode, ColorMode::RGB, "RGB");
+                    // check if an option was selected and scramble if that is the case
+                    if ui
+                        .selectable_value(&mut self.color_mode, ColorMode::Gray, "Gray")
+                        .clicked()
+                        || ui
+                            .selectable_value(&mut self.color_mode, ColorMode::Rg, "RG")
+                            .clicked()
+                        || ui
+                            .selectable_value(&mut self.color_mode, ColorMode::Rgb, "RGB")
+                            .clicked()
+                    {
+                        self.image.scramble(&self.color_mode);
+                    }
                 });
             if ui.button("Quit").clicked() {
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
