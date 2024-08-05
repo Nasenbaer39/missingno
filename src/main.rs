@@ -43,9 +43,17 @@ impl NoiseTexture {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum ColorMode {
+    Gray,
+    RG,
+    RGB,
+}
+
 struct MyApp {
     texture_handle: Option<egui::TextureHandle>,
     image: NoiseTexture,
+    color_mode: ColorMode,
 }
 
 impl MyApp {
@@ -53,6 +61,7 @@ impl MyApp {
         Self {
             texture_handle: None,
             image: NoiseTexture::new(),
+            color_mode : ColorMode::RGB,
         }
     }
 }
@@ -78,8 +87,19 @@ impl eframe::App for MyApp {
         }
 
         egui::SidePanel::right("Options").show(ctx, |ui| {
+            ui.label("Options");
             if ui.button("Scramble").clicked() {
                 self.image.scramble()
+            }
+            egui::ComboBox::from_label("")
+                .selected_text(format!("{:?}", self.color_mode))
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut self.color_mode, ColorMode::Gray, "Gray");
+                    ui.selectable_value(&mut self.color_mode, ColorMode::RG, "RG");
+                    ui.selectable_value(&mut self.color_mode, ColorMode::RGB, "RGB");
+                });
+            if ui.button("Quit").clicked() {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             }
         });
         egui::CentralPanel::default().show(ctx, |ui| {
