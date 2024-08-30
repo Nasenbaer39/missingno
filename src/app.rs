@@ -2,12 +2,11 @@ mod noise;
 
 use eframe::egui;
 use noise::*;
-use std::{thread, time::Duration};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 pub struct Missingno {
     texture_handle: Option<egui::TextureHandle>,
-    image: Arc<Mutex<NoiseTexture>>,
+    image: Arc<NoiseTexture>,
     color_mode: ColorMode,
 }
 
@@ -15,7 +14,7 @@ impl Missingno {
     pub fn new() -> Self {
         Self {
             texture_handle: None,
-            image: Arc::new(Mutex::new(NoiseTexture::new())),
+            image: Arc::new(NoiseTexture::new()),
             color_mode: ColorMode::Gray,
         }
     }
@@ -25,11 +24,10 @@ impl eframe::App for Missingno {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // Load the image into a texture if not already done
         if self.texture_handle.is_none() {
-            let mut img = self.image.lock().unwrap();
-            img.scramble(&self.color_mode);
+            self.image.scramble(&self.color_mode);
             self.texture_handle =
                 Some(
-                    ctx.load_texture("color_texture", img.as_color_image(), {
+                    ctx.load_texture("color_texture", self.image.as_color_image(), {
                         egui::TextureOptions {
                             magnification: egui::TextureFilter::Nearest,
                             minification: egui::TextureFilter::Nearest,
@@ -40,11 +38,10 @@ impl eframe::App for Missingno {
         } else {
             // Update the existing texture with the new image
             // TODO: do not update the image if nothing has changed
-            let img = self.image.lock().unwrap();
             self.texture_handle
                 .as_mut()
                 .unwrap()
-                .set(img.as_color_image(), {
+                .set(self.image.as_color_image(), {
                     egui::TextureOptions {
                         magnification: egui::TextureFilter::Nearest,
                         minification: egui::TextureFilter::Nearest,
@@ -56,8 +53,7 @@ impl eframe::App for Missingno {
         egui::SidePanel::right("Options").show(ctx, |ui| {
             ui.label("Options");
             if ui.button("Scramble").clicked() {
-
-                self.image.lock().unwrap().scramble(&self.color_mode)
+                self.image.scramble(&self.color_mode)
             }
             egui::ComboBox::from_label("")
                 .selected_text(format!("{:?}", self.color_mode).to_uppercase())
@@ -73,19 +69,16 @@ impl eframe::App for Missingno {
                             .selectable_value(&mut self.color_mode, ColorMode::Rgb, "RGB")
                             .clicked()
                     {
-                        self.image.lock().unwrap().scramble(&self.color_mode);
+                        self.image.scramble(&self.color_mode);
                     }
                 });
             if ui.button("Refine").clicked() {
                 let img = Arc::clone(&self.image);
+                let mode = self.color_mode.clone();
 
                 std::thread::spawn(move || {
                     println!("Starting refinement process...");
-                        
-                    loop {
-                        img.lock().unwrap().refine();
-                        thread::sleep(Duration::from_millis(1));
-                    }
+                    img.refine(&mode);
                 });
             }
             if ui.button("Quit").clicked() {
@@ -101,5 +94,3 @@ impl eframe::App for Missingno {
         ctx.request_repaint();
     }
 }
-
-
