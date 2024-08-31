@@ -1,6 +1,6 @@
 use eframe::egui;
 use rand::prelude::*;
-use std::sync::RwLock;
+use std::{f64::consts::LN_2, sync::RwLock};
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub enum ColorMode {
@@ -19,7 +19,7 @@ impl ColorMode {
     }
 }
 
-const NOISE_SCALE: usize = 32;
+const NOISE_SCALE: usize = 16;
 
 const INITIAL_TEMPERATURE: f64 = 1.0;
 const ITERATIONS: usize = 128;
@@ -60,13 +60,13 @@ impl NoiseTexture {
         let mut t = INITIAL_TEMPERATURE;
 
         loop {
+            let dist = ((t / INITIAL_TEMPERATURE + 1.0).ln() * Self::BETA + 1.0).round() as usize;
+            let dist = 2 * dist + 1;
+            println!("Current distance: {dist}");
+
             for _ in 0..ITERATIONS {
                 let first = thread_rng().gen_range(0..NOISE_SCALE * NOISE_SCALE);
-                let mut second = thread_rng().gen_range(0..NOISE_SCALE * NOISE_SCALE - 1);
-
-                if second >= first {
-                    second += 1;
-                }
+                let second = Self::pos_in_range(first, 17);
 
                 Self::swap(&mut data, first, second);
 
@@ -153,5 +153,20 @@ impl NoiseTexture {
                 as f64)
                 .sqrt(),
         }
+    }
+
+    const BETA: f64 = (NOISE_SCALE as f64 - 1.0) / LN_2;
+
+    fn pos_in_range(first: usize, dist: usize) -> usize {
+        let mut rand = thread_rng().gen_range(0..dist * dist - 1);
+
+        if rand >= (dist * dist - 1) / 2 {
+            rand += 1;
+        }
+
+        let x = (NOISE_SCALE + rand % dist - dist / 2 + first % NOISE_SCALE) % NOISE_SCALE;
+        let y = (NOISE_SCALE + rand / dist - dist / 2 + first / NOISE_SCALE) % NOISE_SCALE;
+
+        y * NOISE_SCALE + x
     }
 }
