@@ -141,12 +141,12 @@ impl NoiseTexture {
     fn color_distance(first: &[u8], second: &[u8], mode: &ColorMode) -> f64 {
         match mode {
             ColorMode::Gray => (first[0].abs_diff(second[0])) as f64,
-            ColorMode::Rg => (((first[0] - second[0]) as f64).powi(2)
-                + ((first[1] - second[1]) as f64).powi(2))
+            ColorMode::Rg => ((first[0].abs_diff(second[0]) as f64).powi(2)
+                + (first[1].abs_diff(second[1]) as f64).powi(2))
             .sqrt(),
-            ColorMode::Rgb => (((first[0] - second[0]) as f64).powi(2)
-                + ((first[1] - second[1]) as f64).powi(2)
-                + ((first[2] - second[2]) as f64).powi(2))
+            ColorMode::Rgb => ((first[0].abs_diff(second[0]) as f64).powi(2)
+                + (first[1].abs_diff(second[1]) as f64).powi(2)
+                + (first[2].abs_diff(second[2]) as f64).powi(2))
             .sqrt(),
         }
     }
