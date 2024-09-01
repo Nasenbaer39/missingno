@@ -1,6 +1,7 @@
 use eframe::egui;
 use rand::prelude::*;
-use std::{f64::consts::LN_2, sync::RwLock};
+use rand_distr::{Distribution, Normal};
+use std::sync::RwLock;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub enum ColorMode {
@@ -22,9 +23,9 @@ impl ColorMode {
 const NOISE_SCALE: usize = 16;
 
 const INITIAL_TEMPERATURE: f64 = 1.0;
-const ITERATIONS: usize = 128;
+const ITERATIONS: usize = NOISE_SCALE * 2;
 const ALPHA: f64 = 0.9;
-const SIGMA: f64 = 2.1;
+const SIGMA: f64 = 2.42;
 
 pub struct NoiseTexture {
     data: RwLock<[u8; NOISE_SCALE * NOISE_SCALE * 3]>,
@@ -58,15 +59,16 @@ impl NoiseTexture {
         let mut data = self.data.read().unwrap().clone();
         let mut current_energy = Self::energy(&data, mode);
         let mut t = INITIAL_TEMPERATURE;
+        let mut distribution;
 
         loop {
-            let dist = ((t / INITIAL_TEMPERATURE + 1.0).ln() * Self::BETA + 1.0).round() as usize;
-            let dist = 2 * dist + 1;
-            println!("Current distance: {dist}");
+            distribution = Normal::new(t, 0.15).unwrap();
 
             for _ in 0..ITERATIONS {
                 let first = thread_rng().gen_range(0..NOISE_SCALE * NOISE_SCALE);
-                let second = Self::pos_in_range(first, 17);
+
+                let sample = distribution.sample(&mut thread_rng());
+                let second = Self::pos_in_range(first, Self::sample_dist(sample));
 
                 Self::swap(&mut data, first, second);
 
@@ -103,13 +105,9 @@ impl NoiseTexture {
         let mut overall_energy = 0.0;
         for i in 0..NOISE_SCALE * NOISE_SCALE - 1 {
             for j in i + 1..NOISE_SCALE * NOISE_SCALE {
-                let mut energy = (-Self::pixel_distance_sqr(i, j) / SIGMA.powi(2)).exp();
+                let mut energy = (-Self::pixel_distance_sqr(i, j) / SIGMA).exp();
                 energy /= (1.0
-                    + Self::sample_distance(
-                        &data[i * 3..i * 3 + 3],
-                        &data[j * 3..j * 3 + 3],
-                        mode,
-                    ))
+                    + Self::color_distance(&data[i * 3..i * 3 + 3], &data[j * 3..j * 3 + 3], mode))
                 .powi(mode.dimension())
                 .sqrt();
                 overall_energy += energy;
@@ -140,22 +138,18 @@ impl NoiseTexture {
         return (x * x + y * y) as f64;
     }
 
-    fn sample_distance(first: &[u8], second: &[u8], mode: &ColorMode) -> f64 {
+    fn color_distance(first: &[u8], second: &[u8], mode: &ColorMode) -> f64 {
         match mode {
             ColorMode::Gray => (first[0].abs_diff(second[0])) as f64,
-            ColorMode::Rg => (((first[0].abs_diff(second[0]) as u32).pow(2)
-                + (first[1].abs_diff(second[1]) as u32).pow(2))
-                as f64)
-                .sqrt(),
-            ColorMode::Rgb => (((first[0].abs_diff(second[0]) as u32).pow(2)
-                + (first[1].abs_diff(second[1]) as u32).pow(2)
-                + (first[2].abs_diff(second[2]) as u32).pow(2))
-                as f64)
-                .sqrt(),
+            ColorMode::Rg => (((first[0] - second[0]) as f64).powi(2)
+                + ((first[1] - second[1]) as f64).powi(2))
+            .sqrt(),
+            ColorMode::Rgb => (((first[0] - second[0]) as f64).powi(2)
+                + ((first[1] - second[1]) as f64).powi(2)
+                + ((first[2] - second[2]) as f64).powi(2))
+            .sqrt(),
         }
     }
-
-    const BETA: f64 = (NOISE_SCALE as f64 - 1.0) / LN_2;
 
     fn pos_in_range(first: usize, dist: usize) -> usize {
         let mut rand = thread_rng().gen_range(0..dist * dist - 1);
@@ -168,5 +162,13 @@ impl NoiseTexture {
         let y = (NOISE_SCALE + rand / dist - dist / 2 + first / NOISE_SCALE) % NOISE_SCALE;
 
         y * NOISE_SCALE + x
+    }
+
+    fn sample_dist(sample: f64) -> usize {
+        let mut sample = sample.clamp(-1.0, 2.0).abs();
+        if sample > 1.0 {
+            sample = 2.0 - sample;
+        }
+        2 * (sample * NOISE_SCALE as f64).ceil() as usize + 1
     }
 }
