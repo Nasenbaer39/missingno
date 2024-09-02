@@ -20,10 +20,10 @@ impl ColorMode {
     }
 }
 
-const NOISE_SCALE: usize = 16;
+const NOISE_SCALE: usize = 64;
 
 const INITIAL_TEMPERATURE: f64 = 1.0;
-const ITERATIONS: usize = NOISE_SCALE * 2;
+const ITERATIONS: usize = NOISE_SCALE * 2_usize.pow(NOISE_SCALE as u32 / 32);
 const ALPHA: f64 = 0.9;
 const SIGMA: f64 = 2.42;
 
@@ -57,11 +57,10 @@ impl NoiseTexture {
 
     pub fn refine(&self, mode: &ColorMode) {
         let mut data = self.data.read().unwrap().clone();
-        let mut current_energy = Self::energy(&data, mode);
         let mut t = INITIAL_TEMPERATURE;
         let mut distribution;
 
-        loop {
+        while t > 1e-64 {
             distribution = Normal::new(t, 0.15).unwrap();
 
             for _ in 0..ITERATIONS {
@@ -70,19 +69,19 @@ impl NoiseTexture {
                 let sample = distribution.sample(&mut thread_rng());
                 let second = Self::pos_in_range(first, Self::sample_dist(sample));
 
+                let current_energy = Self::pair_energy(first, second, &data, mode);
+
                 Self::swap(&mut data, first, second);
 
-                let new_energy = Self::energy(&data, mode);
+                let new_energy = Self::pair_energy(first, second, &data, mode);
 
                 if Self::accept(current_energy, new_energy, t) >= thread_rng().gen() {
                     Self::swap(&mut *self.data.write().unwrap(), first, second);
-                    current_energy = new_energy;
                 } else {
                     Self::swap(&mut data, first, second);
                 }
             }
             t *= ALPHA;
-            println!("Current energy:      {current_energy}");
             println!("Current temperature: {t}");
         }
     }
@@ -101,16 +100,39 @@ impl NoiseTexture {
         }
     }
 
-    fn energy(data: &[u8], mode: &ColorMode) -> f64 {
+    fn energy(first: usize, second: usize, data: &[u8], mode: &ColorMode) -> f64 {
+        let mut energy = (-Self::pixel_distance_sqr(first, second) / SIGMA).exp();
+        energy /= (1.0
+            + Self::color_distance(
+                &data[first * 3..first * 3 + 3],
+                &data[second * 3..second * 3 + 3],
+                mode,
+            ))
+        .powi(mode.dimension())
+        .sqrt();
+        energy
+    }
+
+    fn pair_energy(first: usize, second: usize, data: &[u8], mode: &ColorMode) -> f64 {
+        Self::pixel_energy(first, data, mode) + Self::pixel_energy(second, data, mode)
+    }
+
+    fn pixel_energy(pixel: usize, data: &[u8], mode: &ColorMode) -> f64 {
+        let mut pixel_energy = 0.0;
+        for j in 0..NOISE_SCALE * NOISE_SCALE {
+            if j != pixel {
+                pixel_energy += Self::energy(pixel, j, data, mode);
+            }
+        }
+        pixel_energy
+    }
+
+    #[allow(dead_code)]
+    fn total_energy(data: &[u8], mode: &ColorMode) -> f64 {
         let mut overall_energy = 0.0;
         for i in 0..NOISE_SCALE * NOISE_SCALE - 1 {
             for j in i + 1..NOISE_SCALE * NOISE_SCALE {
-                let mut energy = (-Self::pixel_distance_sqr(i, j) / SIGMA).exp();
-                energy /= (1.0
-                    + Self::color_distance(&data[i * 3..i * 3 + 3], &data[j * 3..j * 3 + 3], mode))
-                .powi(mode.dimension())
-                .sqrt();
-                overall_energy += energy;
+                overall_energy += Self::energy(i, j, data, mode);
             }
         }
 
