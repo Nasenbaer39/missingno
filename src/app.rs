@@ -2,11 +2,12 @@ mod noise;
 
 use eframe::egui;
 use noise::*;
-use std::sync::Arc;
+use std::sync::{atomic::{AtomicBool, Ordering}, Arc};
 
 pub struct Missingno {
     texture_handle: Option<egui::TextureHandle>,
     image: Arc<NoiseTexture>,
+    stop: Arc<AtomicBool>,
     color_mode: ColorMode,
 }
 
@@ -15,6 +16,7 @@ impl Missingno {
         Self {
             texture_handle: None,
             image: Arc::new(NoiseTexture::new()),
+            stop: Arc::new(AtomicBool::new(false)),
             color_mode: ColorMode::Gray,
         }
     }
@@ -53,7 +55,8 @@ impl eframe::App for Missingno {
         egui::SidePanel::right("Options").show(ctx, |ui| {
             ui.label("Options");
             if ui.button("Scramble").clicked() {
-                self.image.scramble(&self.color_mode)
+                self.stop.store(true, Ordering::Relaxed);
+                self.image.scramble(&self.color_mode);
             }
             egui::ComboBox::from_label("")
                 .selected_text(format!("{:?}", self.color_mode).to_uppercase())
@@ -69,17 +72,24 @@ impl eframe::App for Missingno {
                             .selectable_value(&mut self.color_mode, ColorMode::Rgb, "RGB")
                             .clicked()
                     {
+                        self.stop.store(true, Ordering::Relaxed);
                         self.image.scramble(&self.color_mode);
                     }
                 });
             if ui.button("Refine").clicked() {
+                self.stop.store(false, Ordering::Relaxed);
+
                 let img = Arc::clone(&self.image);
+                let stop = Arc::clone(&self.stop);
                 let mode = self.color_mode.clone();
 
                 std::thread::spawn(move || {
                     println!("Starting refinement process...");
-                    img.refine(&mode);
+                    img.refine(&mode, stop);
                 });
+            }
+            if ui.button("Stop").clicked() {
+                self.stop.store(true, Ordering::Relaxed);
             }
             if ui.button("Quit").clicked() {
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);

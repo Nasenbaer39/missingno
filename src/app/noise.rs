@@ -1,7 +1,7 @@
 use eframe::egui;
 use rand::prelude::*;
 use rand_distr::{Distribution, Normal};
-use std::sync::RwLock;
+use std::{sync::{atomic::{AtomicBool, Ordering}, Arc, RwLock}};
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub enum ColorMode {
@@ -55,12 +55,12 @@ impl NoiseTexture {
         egui::ColorImage::from_rgb([NOISE_SCALE, NOISE_SCALE], &*self.data.read().unwrap())
     }
 
-    pub fn refine(&self, mode: &ColorMode) {
+    pub fn refine(&self, mode: &ColorMode, stop: Arc<AtomicBool>) {
         let mut data = self.data.read().unwrap().clone();
         let mut t = INITIAL_TEMPERATURE;
         let mut distribution;
 
-        while t > 1e-64 {
+        while !stop.load(Ordering::Relaxed) {
             distribution = Normal::new(t, 0.15).unwrap();
 
             for _ in 0..ITERATIONS {
