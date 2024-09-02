@@ -2,7 +2,10 @@ mod noise;
 
 use eframe::egui;
 use noise::*;
-use std::sync::{atomic::{AtomicBool, Ordering}, Arc};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 
 pub struct Missingno {
     texture_handle: Option<egui::TextureHandle>,
@@ -22,11 +25,23 @@ impl Missingno {
     }
 }
 
-impl eframe::App for Missingno {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Load the image into a texture if not already done
-        if self.texture_handle.is_none() {
-            self.image.scramble(&self.color_mode);
+impl Missingno {
+    fn scramble(&self) {
+        self.stop.store(true, Ordering::Relaxed);
+        self.image.scramble(&self.color_mode);
+    }
+
+    fn update_texture(&mut self, ctx: &egui::Context) {
+        if let Some(texture) = &mut self.texture_handle {
+            texture.set(self.image.as_color_image(), {
+                egui::TextureOptions {
+                    magnification: egui::TextureFilter::Nearest,
+                    minification: egui::TextureFilter::Nearest,
+                    ..egui::TextureOptions::default()
+                }
+            })
+        } else {
+            // Load the image data into a texture
             self.texture_handle =
                 Some(
                     ctx.load_texture("color_texture", self.image.as_color_image(), {
@@ -37,26 +52,17 @@ impl eframe::App for Missingno {
                         }
                     }),
                 );
-        } else {
-            // Update the existing texture with the new image
-            // TODO: do not update the image if nothing has changed
-            self.texture_handle
-                .as_mut()
-                .unwrap()
-                .set(self.image.as_color_image(), {
-                    egui::TextureOptions {
-                        magnification: egui::TextureFilter::Nearest,
-                        minification: egui::TextureFilter::Nearest,
-                        ..egui::TextureOptions::default()
-                    }
-                });
+            self.scramble();
         }
+    }
+}
 
+impl eframe::App for Missingno {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::SidePanel::right("Options").show(ctx, |ui| {
             ui.label("Options");
             if ui.button("Scramble").clicked() {
-                self.stop.store(true, Ordering::Relaxed);
-                self.image.scramble(&self.color_mode);
+                self.scramble();
             }
             egui::ComboBox::from_label("")
                 .selected_text(format!("{:?}", self.color_mode).to_uppercase())
@@ -72,8 +78,7 @@ impl eframe::App for Missingno {
                             .selectable_value(&mut self.color_mode, ColorMode::Rgb, "RGB")
                             .clicked()
                     {
-                        self.stop.store(true, Ordering::Relaxed);
-                        self.image.scramble(&self.color_mode);
+                        self.scramble();
                     }
                 });
             if ui.button("Refine").clicked() {
@@ -95,11 +100,14 @@ impl eframe::App for Missingno {
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             }
         });
+
         egui::CentralPanel::default().show(ctx, |ui| {
             if let Some(texture) = &self.texture_handle {
                 ui.add(egui::Image::new(texture).fit_to_fraction(egui::vec2(1.0, 1.0)));
             }
         });
+
+        self.update_texture(ctx);
 
         ctx.request_repaint();
     }
