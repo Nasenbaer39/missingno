@@ -19,16 +19,18 @@ pub struct Missingno {
     stop: Arc<AtomicBool>,
     color_mode: ColorMode,
     noise_type: NoiseType,
+    size: usize,
 }
 
 impl Missingno {
     pub fn new() -> Self {
         Self {
             texture_handle: None,
-            image: Arc::new(NoiseTexture::new()),
+            image: Arc::new(NoiseTexture::new(64)),
             stop: Arc::new(AtomicBool::new(false)),
             color_mode: ColorMode::Gray,
             noise_type: NoiseType::White,
+            size: 64,
         }
     }
 }
@@ -69,6 +71,7 @@ impl Missingno {
     fn white_noise(&self, _ui: &mut egui::Ui) {}
 
     fn blue_noise(&self, ui: &mut egui::Ui) {
+        ui.separator();
         ui.horizontal(|ui| {
             if ui.button("Refine").clicked() {
                 self.stop.store(false, Ordering::Relaxed);
@@ -86,23 +89,21 @@ impl Missingno {
                 self.stop.store(true, Ordering::Relaxed);
             }
         });
-        ui.separator();
     }
 }
 
 impl eframe::App for Missingno {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::SidePanel::right("Options").show(ctx, |ui| {
+            ui.heading("Options");
+            ui.separator();
             egui::ComboBox::from_label("Noise Type")
                 .selected_text(format!("{:?}", self.noise_type).to_uppercase())
                 .show_ui(ui, |ui| {
                     ui.selectable_value(&mut self.noise_type, NoiseType::White, "White");
                     ui.selectable_value(&mut self.noise_type, NoiseType::Blue, "Blue");
                 });
-            ui.label("Options");
-            if ui.button("Scramble").clicked() {
-                self.scramble();
-            }
+            ui.add_space(8.0);
             egui::ComboBox::from_label("")
                 .selected_text(format!("{:?}", self.color_mode).to_uppercase())
                 .show_ui(ui, |ui| {
@@ -120,13 +121,27 @@ impl eframe::App for Missingno {
                         self.scramble();
                     }
                 });
-            ui.separator();
+            let resized = ui
+                .add(
+                    egui::DragValue::new(&mut self.size)
+                        .range(2..=512)
+                        .suffix("px")
+                        .update_while_editing(false),
+                )
+                .changed();
+            if ui.button("Scramble").clicked() {
+                self.scramble();
+            }
+
+            if resized {
+                self.stop.store(true, Ordering::Relaxed);
+                self.image.resize(self.size);
+                Self::scramble(&self);
+            }
+
             match self.noise_type {
                 NoiseType::White => self.white_noise(ui),
                 NoiseType::Blue => self.blue_noise(ui),
-            }
-            if ui.button("Quit").clicked() {
-                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             }
         });
 

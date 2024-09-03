@@ -1,7 +1,10 @@
 use eframe::egui;
 use rand::prelude::*;
 use rand_distr::{Distribution, Normal};
-use std::sync::{atomic::{AtomicBool, Ordering}, Arc, RwLock};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, RwLock,
+};
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub enum ColorMode {
@@ -20,22 +23,26 @@ impl ColorMode {
     }
 }
 
-const NOISE_SCALE: usize = 64;
-
 const INITIAL_TEMPERATURE: f64 = 1.0;
-const ITERATIONS: usize = NOISE_SCALE * 2_usize.pow(NOISE_SCALE as u32 / 32);
 const ALPHA: f64 = 0.9;
 const SIGMA: f64 = 2.42;
 
 pub struct NoiseTexture {
-    data: RwLock<[u8; NOISE_SCALE * NOISE_SCALE * 3]>,
+    data: RwLock<Vec<u8>>,
+    size: RwLock<usize>,
 }
 
 impl NoiseTexture {
-    pub fn new() -> Self {
+    pub fn new(size: usize) -> Self {
         Self {
-            data: RwLock::new([0; NOISE_SCALE * NOISE_SCALE * 3]),
+            data: RwLock::new(vec![0; size * size * 3]),
+            size: RwLock::new(size),
         }
+    }
+
+    pub fn resize(&self, size: usize) {
+        *self.size.write().unwrap() = size;
+        self.data.write().unwrap().resize(size * size * 3, 0);
     }
 
     pub fn scramble(&self, mode: &ColorMode) {
@@ -52,28 +59,32 @@ impl NoiseTexture {
     }
 
     pub fn as_color_image(&self) -> egui::ColorImage {
-        egui::ColorImage::from_rgb([NOISE_SCALE, NOISE_SCALE], &*self.data.read().unwrap())
+        let size = *self.size.read().unwrap();
+        egui::ColorImage::from_rgb([size, size], &*self.data.read().unwrap())
     }
 
     pub fn refine(&self, mode: &ColorMode, stop: Arc<AtomicBool>) {
+        let size = self.size.read().unwrap();
         let mut data = self.data.read().unwrap().clone();
         let mut t = INITIAL_TEMPERATURE;
+        let iterations = *size * 2_usize.pow(*size as u32 / 32);
+
         let mut distribution;
 
         while !stop.load(Ordering::Relaxed) {
             distribution = Normal::new(t, 0.15).unwrap();
 
-            for _ in 0..ITERATIONS {
-                let first = thread_rng().gen_range(0..NOISE_SCALE * NOISE_SCALE);
+            for _ in 0..iterations {
+                let first = thread_rng().gen_range(0..*size * *size);
 
                 let sample = distribution.sample(&mut thread_rng());
-                let second = Self::pos_in_range(first, Self::sample_dist(sample));
+                let second = Self::pos_in_range(*size, first, Self::sample_dist(*size, sample));
 
-                let current_energy = Self::pair_energy(first, second, &data, mode);
+                let current_energy = Self::pair_energy(*size, first, second, &data, mode);
 
                 Self::swap(&mut data, first, second);
 
-                let new_energy = Self::pair_energy(first, second, &data, mode);
+                let new_energy = Self::pair_energy(*size, first, second, &data, mode);
 
                 if Self::accept(current_energy, new_energy, t) >= thread_rng().gen() {
                     Self::swap(&mut *self.data.write().unwrap(), first, second);
@@ -100,8 +111,8 @@ impl NoiseTexture {
         }
     }
 
-    fn energy(first: usize, second: usize, data: &[u8], mode: &ColorMode) -> f64 {
-        let mut energy = (-Self::pixel_distance_sqr(first, second) / SIGMA).exp();
+    fn energy(size: usize, first: usize, second: usize, data: &[u8], mode: &ColorMode) -> f64 {
+        let mut energy = (-Self::pixel_distance_sqr(size, first, second) / SIGMA).exp();
         energy /= (1.0
             + Self::color_distance(
                 &data[first * 3..first * 3 + 3],
@@ -113,48 +124,48 @@ impl NoiseTexture {
         energy
     }
 
-    fn pair_energy(first: usize, second: usize, data: &[u8], mode: &ColorMode) -> f64 {
-        Self::pixel_energy(first, data, mode) + Self::pixel_energy(second, data, mode)
+    fn pair_energy(size: usize, first: usize, second: usize, data: &[u8], mode: &ColorMode) -> f64 {
+        Self::pixel_energy(size, first, data, mode) + Self::pixel_energy(size, second, data, mode)
     }
 
-    fn pixel_energy(pixel: usize, data: &[u8], mode: &ColorMode) -> f64 {
+    fn pixel_energy(size: usize, pixel: usize, data: &[u8], mode: &ColorMode) -> f64 {
         let mut pixel_energy = 0.0;
-        for j in 0..NOISE_SCALE * NOISE_SCALE {
+        for j in 0..size * size{
             if j != pixel {
-                pixel_energy += Self::energy(pixel, j, data, mode);
+                pixel_energy += Self::energy(size, pixel, j, data, mode);
             }
         }
         pixel_energy
     }
 
     #[allow(dead_code)]
-    fn total_energy(data: &[u8], mode: &ColorMode) -> f64 {
+    fn total_energy(size: usize, data: &[u8], mode: &ColorMode) -> f64 {
         let mut overall_energy = 0.0;
-        for i in 0..NOISE_SCALE * NOISE_SCALE - 1 {
-            for j in i + 1..NOISE_SCALE * NOISE_SCALE {
-                overall_energy += Self::energy(i, j, data, mode);
+        for i in 0..size* size- 1 {
+            for j in i + 1..size* size {
+                overall_energy += Self::energy(size, i, j, data, mode);
             }
         }
 
         overall_energy
     }
 
-    fn pixel_distance_sqr(first: usize, second: usize) -> f64 {
-        let x1 = first % NOISE_SCALE;
-        let x2 = second % NOISE_SCALE;
+    fn pixel_distance_sqr(size: usize, first: usize, second: usize) -> f64 {
+        let x1 = first % size;
+        let x2 = second % size;
 
-        let y1 = first / NOISE_SCALE;
-        let y2 = second / NOISE_SCALE;
+        let y1 = first / size;
+        let y2 = second / size;
 
         let mut x = x1.abs_diff(x2);
         let mut y = y1.abs_diff(y2);
 
-        if x > NOISE_SCALE / 2 {
-            x = NOISE_SCALE - x;
+        if x > size / 2 {
+            x = size - x;
         }
 
-        if y > NOISE_SCALE / 2 {
-            y = NOISE_SCALE - y;
+        if y > size / 2 {
+            y = size - y;
         }
 
         return (x * x + y * y) as f64;
@@ -173,24 +184,25 @@ impl NoiseTexture {
         }
     }
 
-    fn pos_in_range(first: usize, dist: usize) -> usize {
+    fn pos_in_range(size: usize, first: usize, dist: usize) -> usize {
         let mut rand = thread_rng().gen_range(0..dist * dist - 1);
 
         if rand >= (dist * dist - 1) / 2 {
             rand += 1;
         }
 
-        let x = (NOISE_SCALE + rand % dist - dist / 2 + first % NOISE_SCALE) % NOISE_SCALE;
-        let y = (NOISE_SCALE + rand / dist - dist / 2 + first / NOISE_SCALE) % NOISE_SCALE;
+        let x = (size + rand % dist - dist / 2 + first % size) % size;
+        let y = (size + rand / dist - dist / 2 + first / size) % size;
 
-        y * NOISE_SCALE + x
+        y * size + x
     }
 
-    fn sample_dist(sample: f64) -> usize {
+    fn sample_dist(size: usize, sample: f64) -> usize {
         let mut sample = sample.clamp(-1.0, 2.0).abs();
+
         if sample > 1.0 {
             sample = 2.0 - sample;
         }
-        2 * (sample * NOISE_SCALE as f64).ceil() as usize + 1
+        2 * (sample * size as f64).ceil() as usize + 1
     }
 }
