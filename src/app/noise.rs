@@ -1,7 +1,7 @@
 use eframe::egui;
 use rand::prelude::*;
 use rand_distr::{Distribution, Normal};
-use std::{sync::{atomic::{AtomicBool, Ordering}, Arc, RwLock}};
+use std::sync::{atomic::{AtomicBool, Ordering}, Arc, RwLock};
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub enum ColorMode {

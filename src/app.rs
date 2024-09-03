@@ -7,11 +7,18 @@ use std::sync::{
     Arc,
 };
 
+#[derive(Debug, PartialEq)]
+enum NoiseType {
+    White,
+    Blue,
+}
+
 pub struct Missingno {
     texture_handle: Option<egui::TextureHandle>,
     image: Arc<NoiseTexture>,
     stop: Arc<AtomicBool>,
     color_mode: ColorMode,
+    noise_type: NoiseType,
 }
 
 impl Missingno {
@@ -21,6 +28,7 @@ impl Missingno {
             image: Arc::new(NoiseTexture::new()),
             stop: Arc::new(AtomicBool::new(false)),
             color_mode: ColorMode::Gray,
+            noise_type: NoiseType::White,
         }
     }
 }
@@ -57,9 +65,40 @@ impl Missingno {
     }
 }
 
+impl Missingno {
+    fn white_noise(&self, _ui: &mut egui::Ui) {}
+
+    fn blue_noise(&self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            if ui.button("Refine").clicked() {
+                self.stop.store(false, Ordering::Relaxed);
+
+                let img = Arc::clone(&self.image);
+                let stop = Arc::clone(&self.stop);
+                let mode = self.color_mode.clone();
+
+                std::thread::spawn(move || {
+                    println!("Starting refinement process...");
+                    img.refine(&mode, stop);
+                });
+            }
+            if ui.button("Stop").clicked() {
+                self.stop.store(true, Ordering::Relaxed);
+            }
+        });
+        ui.separator();
+    }
+}
+
 impl eframe::App for Missingno {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::SidePanel::right("Options").show(ctx, |ui| {
+            egui::ComboBox::from_label("Noise Type")
+                .selected_text(format!("{:?}", self.noise_type).to_uppercase())
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut self.noise_type, NoiseType::White, "White");
+                    ui.selectable_value(&mut self.noise_type, NoiseType::Blue, "Blue");
+                });
             ui.label("Options");
             if ui.button("Scramble").clicked() {
                 self.scramble();
@@ -81,20 +120,10 @@ impl eframe::App for Missingno {
                         self.scramble();
                     }
                 });
-            if ui.button("Refine").clicked() {
-                self.stop.store(false, Ordering::Relaxed);
-
-                let img = Arc::clone(&self.image);
-                let stop = Arc::clone(&self.stop);
-                let mode = self.color_mode.clone();
-
-                std::thread::spawn(move || {
-                    println!("Starting refinement process...");
-                    img.refine(&mode, stop);
-                });
-            }
-            if ui.button("Stop").clicked() {
-                self.stop.store(true, Ordering::Relaxed);
+            ui.separator();
+            match self.noise_type {
+                NoiseType::White => self.white_noise(ui),
+                NoiseType::Blue => self.blue_noise(ui),
             }
             if ui.button("Quit").clicked() {
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
