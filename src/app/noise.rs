@@ -71,10 +71,13 @@ impl NoiseTexture {
 
         let mut distribution;
 
-        while !stop.load(Ordering::Relaxed) {
+        // TODO: add some kind of stop condition here
+        loop {
             distribution = Normal::new(t, 0.15).unwrap();
 
             for _ in 0..iterations {
+                if stop.load(Ordering::Relaxed) { return }
+
                 let first = thread_rng().gen_range(0..*size * *size);
 
                 let sample = distribution.sample(&mut thread_rng());
